@@ -48,6 +48,7 @@ const UPDATE_RATE_LIMIT = rateLimit({
 });
 
 const usersFilePath = path.join(__dirname, 'users.json');
+app.set('trust proxy', true); // added to trust nginx proxy
 app.use(express.static('public'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
