@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=0.6">
+    <title>Reserve | Redbox.my</title>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="form-container">
+        <h1>Register a Domain</h1>
+        <p style="text-align: center;">Select a subdomain below to reserve your own Redbox.my domain!</p>
+
+        <form id="signup-form">
+            <label for="subdomain">Subdomain:</label>
+            <input type="text" id="subdomain" name="subdomain" required placeholder="xxxxx.redbox.my" style="margin-bottom: 5px;">
+            <div id="preview" style="margin-bottom: 20px;"></div>
+
+            <label for="password">Password/PIN:</label>
+            <input type="password" id="password" name="password" required>
+
+            <div class="g-recaptcha" data-sitekey="6LdJ4tYqAAAAAEgPXmlgv_iBRw7r2vIzG9V1kBXD"></div>
+            <button type="submit">Sign Up</button>
+        </form>
+
+        <p id="message" style="margin-bottom: 0px;"></p>
+    </div>
+    <p style="margin-top: 10px;">Already have a subdomain? <a href="/login">Sign in here.</a></p>
+
+    <%- include('footer') %>
+    <script>
+        const message = $('#message');
+
+        $('#subdomain').on('input', function() {
+            const subdomain = ($(this).val().trim()).toLowerCase();
+            const preview = $('#preview');
+            clearTimeout(window.debounceTimeout);
+
+            message.text('');
+            preview.text('');
+
+            if (subdomain) {
+                window.debounceTimeout = setTimeout(async function() {
+                    if(subdomain.length < 3 || subdomain.length > 60) {
+                        return message.text('Subdomain must be between 3 and 60 characters.');
+                    } else if(!/^[a-z0-9]+$/.test(subdomain)) {
+                        return message.text('Subdomain can only contain letters and numbers.');
+                    } else {
+                        preview.text('Checking availability...').css('color', '#c3c331');
+                    }
+
+                    try {
+                        const response = await $.ajax({
+                            url: '/available',
+                            method: 'POST',
+                            data: { subdomain: subdomain },
+                            dataType: 'json'
+                        });
+
+                        if (response.success) {
+                            preview.text(`${subdomain}.redbox.my is available!`).css('color', 'green');
+                            $('[type="submit"]').prop('disabled', false);
+                        } else {
+                            preview.text(`${subdomain}.redbox.my is already taken.`).css('color', 'red');
+                            $('[type="submit"]').prop('disabled', true);
+                        }
+                    } catch (error) {
+                        preview.text('Signups are currently disabled.').css('color', 'red');
+                        console.error(error);
+                    }
+                }, 500);
+            } else {
+                preview.text('');
+            }
+        });
+    
+        $('#signup-form').on('submit', async function(event) {
+            event.preventDefault();
+            message.text('');
+    
+            const subdomain = $('#subdomain').val().trim();
+            const password = $('#password').val().trim();
+            const recaptchaResponse = grecaptcha.getResponse();
+    
+            if (!subdomain || !password) {
+                return message.text('Please fill out all fields before submitting.');
+            } else if(!recaptchaResponse) {
+                return message.text('In order to verify your request, complete the reCAPTCHA.');
+            } else if(password.length < 6) {
+                return message.text('Password must be at least 6 characters long.');
+            } else if(password.length > 30) {
+                return message.text('Password must be less than 30 characters long.');
+            }
+
+            try {
+                const response = await $.ajax({
+                    url: '/signup',
+                    method: 'POST',
+                    data: {
+                        subdomain: subdomain,
+                        password: password,
+                        'g-recaptcha-response': recaptchaResponse
+                    },
+                    dataType: 'json'
+                });
+    
+                if(response.error) {
+                    message.text(response.error);
+                    grecaptcha.reset();
+                } else if(response.success == true) {
+                    window.location.href = '/dashboard';
+                }
+            } catch (error) {
+                message.text('It looks like signups are currently disabled.');
+                console.error(error);
+            }
+        });
+    </script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.has('deleted')) {
+            message.text('Your domain has been successfully deleted.');
+        }
+    </script>
+</body>
+</html>

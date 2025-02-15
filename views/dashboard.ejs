@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=0.6">
+    <title>Dashboard | Redbox.my</title>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <a href="/logout" class="logout">Logout</a>
+
+    <div class="form-container">
+        <h1>Welcome!</h1>
+        <p style="text-align: center;">You're currently managing: <span style="color: green"><%= user.subdomain %>.redbox.my</span></p>
+
+        <form id="update-form">
+            <label for="ip">IP Address / Domain:</label>
+            <input type="text" id="ip" name="ip" placeholder="xxx.x.xxx.xxx" style="margin-bottom: 5px;" value="<%= user.ip || '' %>">
+            
+            <label class="tick-container" style="margin-top: 5px;">
+                <input type="checkbox" id="proxying" name="proxying" <%= user.proxying ? 'checked' : '' %>>
+                Proxying
+            </label><br>
+
+            <label for="password">Update Password/PIN:</label>
+            <input type="password" id="password" name="password" placeholder="Enter a new password...">
+
+            <div class="g-recaptcha" data-sitekey="6LdJ4tYqAAAAAEgPXmlgv_iBRw7r2vIzG9V1kBXD"></div>
+            <p id="message"></p>
+            <button type="submit">Update</button>
+        </form>
+
+        <form action="/delete" method="POST" style="text-align: center; margin-top: 10px; margin-bottom: 0px;">
+            <button type="submit" style="background: none; border: none; color: red; font-weight: 700; cursor: pointer; margin: 0px; padding: 0px;"
+                onclick="return confirm('Are you sure you want to delete this domain? This action is irreversible, and the domain will become available for others to reserve.');">
+                Delete Account
+            </button>
+        </form>
+    </div>
+
+    <%- include('footer') %>
+    <script>    
+        const message = $('#message');
+
+        $('#update-form').on('submit', async function(event) {
+            event.preventDefault();
+            message.html('');
+    
+            const ip = $('#ip').val().trim();
+            const password = $('#password').val().trim();
+            const proxying = $('#proxying').is(':checked');
+            const recaptchaResponse = grecaptcha.getResponse();
+    
+            if(!recaptchaResponse) {
+                return message.html('In order to verify your request, complete the reCAPTCHA.');
+            }
+
+            try {
+                const response = await $.ajax({
+                    url: '/update',
+                    method: 'POST',
+                    data: {
+                        ip: ip,
+                        password: password,
+                        proxying: proxying,
+                        'g-recaptcha-response': recaptchaResponse
+                    },
+                    dataType: 'json'
+                });
+    
+                if(response.error) {
+                    message.html(response.error);
+                } else if(response.success == true) {
+                    message.html('<span style="color: green;">Your details have been successfully updated!</span>');
+                }
+
+                grecaptcha.reset();
+            } catch (error) {
+                message.html('It looks like updates are currently disabled.');
+                console.error(error);
+            }
+        });
+    </script>    
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=0.6">
+    <title>Login | Redbox.my</title>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="form-container">
+        <h1>Dashboard Login</h1>
+        <p style="text-align: center;">Login to your dashboard to manage your subdomain DNS record(s).</p>
+
+        <form id="login-form">
+            <label for="subdomain">Subdomain:</label>
+            <input type="text" id="subdomain" name="subdomain" required placeholder="xxxxx.redbox.my" style="margin-bottom: 5px;"><br><br>
+
+            <label for="password">Password/PIN:</label>
+            <input style="margin-bottom: 0px;" type="password" id="password" name="password" required>
+            <label style="margin-top: 3px; margin-bottom: 20px; cursor: pointer;"><a onclick="return confirm(`If you'd like to request a password reset, you'll need to verify ownership of the server pointing to your Redbox.my domain.\n\nWould you like to continue?`)" href="mailto:contact@redbox.my?subject=Request%20password%20reset.&body=Hello%2C%20I'd%20like%20to%20request%20a%20password%20reset%20for%20my%20subdomain%20below%3A%0A" _target="_blank" style="text-decoration: none; color: inherit;">Forgot password?</a></label>
+
+            <div class="g-recaptcha" data-sitekey="6LdJ4tYqAAAAAEgPXmlgv_iBRw7r2vIzG9V1kBXD"></div>
+            <button type="submit">Access</button>
+        </form>
+
+        <p id="message" style="margin-bottom: 0px;"></p>
+    </div>
+    <p style="margin-top: 10px;">Don't yet have a subdomain? <a href="/signup">Get one here.</a></p>
+
+    <%- include('footer') %>
+    <script>
+        const message = $('#message');
+    
+        $('#login-form').on('submit', async function(event) {
+            event.preventDefault();
+            message.text('');
+    
+            const subdomain = $('#subdomain').val().trim();
+            const password = $('#password').val().trim();
+            const recaptchaResponse = grecaptcha.getResponse();
+    
+            if (!subdomain || !password) {
+                return message.text('Please fill out all fields before submitting.');
+            } else if(!recaptchaResponse) {
+                return message.text('In order to verify your request, complete the reCAPTCHA.');
+            }
+
+            try {
+                const response = await $.ajax({
+                    url: '/login',
+                    method: 'POST',
+                    data: {
+                        subdomain: subdomain,
+                        password: password,
+                        'g-recaptcha-response': recaptchaResponse
+                    },
+                    dataType: 'json'
+                });
+    
+                if(response.error) {
+                    message.text(response.error);
+                    grecaptcha.reset();
+                } else if(response.success == true) {
+                    window.location.href = '/dashboard';
+                }
+            } catch (error) {
+                message.text('It looks like logins are currently disabled.');
+                console.error(error);
+            }
+        });
+    </script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.has('deleted')) {
+            message.text('Your domain has been successfully deleted.');
+        }
+    </script>
+</body>
+</html>
