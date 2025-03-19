@@ -108,9 +108,9 @@ async function reserveDNS(subdomain) {
 }
 
 // Update DNS record in Cloudflare
-async function updateDNS(subdomain, ip, proxying, type, wasWildcard, wildcard) {
+async function updateDNS(subdomain, ip, proxying, type) {
     try {
-        const recordResponse = await axios.get(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${wasWildcard ? ('*.' + subdomain) : subdomain}.redbox.my`, {
+        const recordResponse = await axios.get(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${subdomain}.redbox.my`, {
             headers: {
                 Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
                 'Content-Type': 'application/json',
@@ -121,7 +121,7 @@ async function updateDNS(subdomain, ip, proxying, type, wasWildcard, wildcard) {
         const recordId = recordResponse.data.result[0].id; // Get the record ID from Cloudflare
         const updateResponse = await axios.put(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${recordId}`, {
                 type: type || 'A',
-                name: `${wildcard ? ('*.' + subdomain) : subdomain}.redbox.my`,
+                name: `${subdomain}.redbox.my`,
                 content: ip,
                 ttl: 1,
                 proxied: proxying,
@@ -272,9 +272,14 @@ app.post('/delete', async (req, res) => {
     if(!req.session.user) {
         res.redirect('/login');
     } else {
-        const { subdomain } = req.session.user;
+        const { subdomain, wildcard } = req.session.user;
         const deleted = await deleteDNS(subdomain); // delete the DNS record
         if(!deleted) return res.send('It looks like an error occurred while deleting your domain. Please try again later.');
+
+        if(wildcard) { // if user had a wildcard setup, delete it too
+            const deleteWildcard = await deleteDNS('*.' + subdomain); // delete the wildcard DNS record
+            if(!deleteWildcard) return res.send('It looks like an error occurred while deleting your wildcard. Please try again later.');
+        }
 
         const users = await readUsers();
         const newUsers = users.filter(user => user.subdomain !== subdomain); // remove the user from the users.json file
@@ -411,8 +416,21 @@ app.post("/update", UPDATE_RATE_LIMIT, async (req, res) => {
                 return res.json({ error: 'Please enter a valid IP address or CNAME domain.' });
             } else {
                 const method = isIpOrDomain(ip) === 'ip' ? 'A' : 'CNAME';
-                const update = await updateDNS(user.subdomain, ip, proxying, method, user.wildcard, wildcard); // update the DNS record
+                const update = await updateDNS(user.subdomain, ip, proxying, method); // update the DNS record
                 if(!update) return res.json({ error: 'A server error occurred, please try again later.' });
+
+                if(wildcard && !user.wildcard) { // if user has just setup their wildcard
+                    const reserve = await reserveDNS('*.' + user.subdomain); // create the wildcard DNS record
+                    if(!reserve) return res.json({ error: 'A server error occurred, please try again later.' });
+                } else if(!wildcard && user.wildcard) { // if user wants to delete their wildcard
+                    const deleted = await deleteDNS('*.' + user.subdomain); // delete the wildcard DNS record
+                    if(!deleted) return res.send({ error: 'A server error occurred, please try again later.' });
+                }
+
+                if(wildcard) { // at the end, if they have a wildcard, update it
+                    const update = await updateDNS('*.' + user.subdomain, ip, proxying, method); // update the DNS record
+                    if(!update) return res.json({ error: 'A server error occurred, please try again later.' });
+                }
 
                 user.ip = ip;
                 user.proxying = proxying;
