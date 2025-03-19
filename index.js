@@ -49,6 +49,7 @@ const UPDATE_RATE_LIMIT = rateLimit({
 
 const usersFilePath = path.join(__dirname, 'users.json');
 app.use(express.static('public'));
+app.set('trust proxy', 1); // added by Brian, trusting one hop (nginx proxy manager)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.set('view engine', 'ejs');
@@ -107,9 +108,9 @@ async function reserveDNS(subdomain) {
 }
 
 // Update DNS record in Cloudflare
-async function updateDNS(subdomain, ip, proxying, type) {
+async function updateDNS(subdomain, ip, proxying, type, wasWildcard, wildcard) {
     try {
-        const recordResponse = await axios.get(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${subdomain}.redbox.my`, {
+        const recordResponse = await axios.get(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${wasWildcard ? ('*.' + subdomain) : subdomain}.redbox.my`, {
             headers: {
                 Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
                 'Content-Type': 'application/json',
@@ -120,7 +121,7 @@ async function updateDNS(subdomain, ip, proxying, type) {
         const recordId = recordResponse.data.result[0].id; // Get the record ID from Cloudflare
         const updateResponse = await axios.put(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${recordId}`, {
                 type: type || 'A',
-                name: `${subdomain}.redbox.my`,
+                name: `${wildcard ? ('*.' + subdomain) : subdomain}.redbox.my`,
                 content: ip,
                 ttl: 1,
                 proxied: proxying,
@@ -367,6 +368,7 @@ app.post('/signup', SIGNUP_RATE_LIMIT, rejectLoggedIn, async (req, res) => {
         hash: await bcrypt.hash(password, 10), // hash the password w/ bcrypt
         ip: reserve.ip, // default IP address
         proxying: reserve.proxied, // default proxying status
+		wildcard: false, // disabled by default
     };
     users.push(newUser);
 
@@ -379,8 +381,9 @@ app.post("/update", UPDATE_RATE_LIMIT, async (req, res) => {
     if(!req.session.user) {
         res.redirect('/login');
     } else {
-        const { ip, 'proxying': proxyingText, password, 'g-recaptcha-response': recaptchaToken } = req.body;
+        const { ip, 'proxying': proxyingText, 'wildcard': wildcardText, password, 'g-recaptcha-response': recaptchaToken } = req.body;
         const proxying = proxyingText === "true";
+		const wildcard = wildcardText === "true";
 
         // Verify the reCAPTCHA
         if (!(await verifyRecaptcha(recaptchaToken))) {
@@ -403,16 +406,17 @@ app.post("/update", UPDATE_RATE_LIMIT, async (req, res) => {
             }
         }
 
-        if(ip !== user.ip || proxying !== user.proxying) {
+        if(ip !== user.ip || proxying !== user.proxying || wildcard !== user.wildcard) {
             if(!isIpOrDomain(ip)) {
                 return res.json({ error: 'Please enter a valid IP address or CNAME domain.' });
             } else {
                 const method = isIpOrDomain(ip) === 'ip' ? 'A' : 'CNAME';
-                const update = await updateDNS(user.subdomain, ip, proxying, method); // update the DNS record
+                const update = await updateDNS(user.subdomain, ip, proxying, method, user.wildcard, wildcard); // update the DNS record
                 if(!update) return res.json({ error: 'A server error occurred, please try again later.' });
 
                 user.ip = ip;
                 user.proxying = proxying;
+				user.wildcard = wildcard;
 
                 await saveUsers(users);
                 req.session.user = user;

@@ -23,6 +23,11 @@
             <input type="text" id="ip" name="ip" placeholder="xxx.x.xxx.xxx" style="margin-bottom: 5px;" value="<%= user.ip || '' %>">
             
             <label class="tick-container" style="margin-top: 5px;">
+                <input type="checkbox" id="wildcard" name="wildcard" <%= user.wildcard ? 'checked' : '' %>>
+                Use Wildcard
+            </label>
+			
+            <label class="tick-container" style="margin-top: 5px;">
                 <input type="checkbox" id="proxying" name="proxying" <%= user.proxying ? 'checked' : '' %>>
                 Proxying
             </label><br>
@@ -54,6 +59,7 @@
             const ip = $('#ip').val().trim();
             const password = $('#password').val().trim();
             const proxying = $('#proxying').is(':checked');
+			const wildcard = $('#wildcard').is(':checked');
             const recaptchaResponse = grecaptcha.getResponse();
     
             if(!recaptchaResponse) {
@@ -68,6 +74,7 @@
                         ip: ip,
                         password: password,
                         proxying: proxying,
+						wildcard: wildcard,
                         'g-recaptcha-response': recaptchaResponse
                     },
                     dataType: 'json'
