@@ -49,7 +49,7 @@ const UPDATE_RATE_LIMIT = rateLimit({
 
 const usersFilePath = path.join(__dirname, 'users.json');
 app.use(express.static('public'));
-app.set('trust proxy', 1); // added by Brian, trusting one hop (nginx proxy manager)
+app.set('trust proxy', 1); // added by Brian, trusting two hops (nginx proxy manager, cloudflare proxying)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.set('view engine', 'ejs');
